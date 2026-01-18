@@ -1,0 +1,138 @@
+import telebot
+import time
+import threading
+import requests
+
+# --- CONFIGURATION ---
+BOT_TOKEN = '8183778698:AAGiOJuiN4ZRT7iEvIQLM3JaHc_tu1EFSWY'  # আপনার টোকেন এখানে দিন
+CHANNEL_ID = '@big_maruf_official0' # আপনার গ্রুপের ইউজারনেম সেট করা হলো
+API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json"
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# --- GLOBAL VARIABLES ---
+is_running = False
+consecutive_wins = 0
+last_processed_period = None
+
+# --- API DATA FETCH ---
+def get_latest_data():
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(API_URL, headers=headers, timeout=10)
+        data = response.json()
+        if 'data' in data and 'list' in data['data']:
+            return data['data']['list']
+        return None
+    except Exception as e:
+        print(f"API Error: {e}")
+        return None
+
+# --- PREDICTION LOGIC ---
+def calculate_prediction(history):
+    if not history or len(history) < 3:
+        return "BIG"
+
+    n1 = int(history[0]['number'])
+    n2 = int(history[1]['number'])
+    n3 = int(history[2]['number'])
+
+    size1 = "BIG" if n1 >= 5 else "SMALL"
+    size2 = "BIG" if n2 >= 5 else "SMALL"
+    size3 = "BIG" if n3 >= 5 else "SMALL"
+
+    # Logic: Trend Cut or Zigzag
+    if size1 == size2 and size2 == size3:
+        return "SMALL" if size1 == "BIG" else "BIG"
+    if size1 == size3 and size1 != size2:
+        return size2
+        
+    return "SMALL" if size1 == "BIG" else "BIG"
+
+# --- MAIN BOT LOOP ---
+def bot_loop():
+    global is_running, consecutive_wins, last_processed_period
+
+    while is_running:
+        history = get_latest_data()
+        
+        if history:
+            latest_issue = history[0]
+            current_period_num = int(latest_issue['issueNumber'])
+            next_period_num = current_period_num + 1
+            
+            if last_processed_period != next_period_num:
+                prediction = calculate_prediction(history)
+                
+                # ১. গ্রুপে সিগন্যাল পাঠানো
+                msg = (
+                    f"🎰 **PREDICTION ALERT** 🎰\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"⏰ Period: `{next_period_num}`\n"
+                    f"🎯 Bet On: **{prediction}**\n"
+                    f"📊 Logic: Smart AI Pattern\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"⏳ রেজাল্টের জন্য অপেক্ষা করুন..."
+                )
+                try:
+                    bot.send_message(CHANNEL_ID, msg, parse_mode='Markdown')
+                except Exception as e:
+                    print(f"Error sending message: {e}")
+
+                # ২. রেজাল্টের জন্য ৫৫ সেকেন্ড অপেক্ষা
+                time.sleep(55) 
+                
+                # ৩. উইন/লস চেক করা
+                new_history = get_latest_data()
+                if new_history:
+                    result_issue = new_history[0]
+                    if int(result_issue['issueNumber']) == next_period_num:
+                        result_num = int(result_issue['number'])
+                        real_size = "BIG" if result_num >= 5 else "SMALL"
+                        
+                        if real_size == prediction:
+                            consecutive_wins += 1
+                            win_msg = f"✅ **WIN! WIN! WIN!** ✅\nResult: {real_size} ({result_num})"
+                            if consecutive_wins >= 3:
+                                win_msg += f"\n🔥 **SUPER WIN STREAK: {consecutive_wins}** 🔥"
+                            bot.send_message(CHANNEL_ID, win_msg, parse_mode='Markdown')
+                        else:
+                            consecutive_wins = 0
+                            bot.send_message(CHANNEL_ID, f"❌ **LOSS**\nResult: {real_size} ({result_num})\nNext time recover.", parse_mode='Markdown')
+                
+                last_processed_period = next_period_num
+            else:
+                time.sleep(10)
+        else:
+            time.sleep(5)
+
+# --- COMMANDS (Only Admin can control) ---
+
+@bot.message_handler(commands=['start', 'on'])
+def start_command(message):
+    global is_running
+    # আপনি প্রাইভেট চ্যাট থেকে স্টার্ট করবেন
+    if is_running:
+        bot.reply_to(message, "⚠️ Bot already running in the channel!")
+    else:
+        is_running = True
+        bot.reply_to(message, f"✅ **Bot Started!**\nSignals are now being sent to {CHANNEL_ID}")
+        threading.Thread(target=bot_loop).start()
+
+@bot.message_handler(commands=['stop', 'off'])
+def stop_command(message):
+    global is_running, consecutive_wins
+    if not is_running:
+        bot.reply_to(message, "Bot is currently OFF.")
+    else:
+        is_running = False
+        bot.reply_to(message, "🛑 **Bot Stopped.** Signals stopped.")
+        # গ্রুপেও জানিয়ে দিবে যে সেশন শেষ
+        bot.send_message(CHANNEL_ID, f"🛑 **SESSION CLOSED** 🛑\nThank you for playing!")
+        consecutive_wins = 0
+
+# --- RUN ---
+print("Bot is ready...")
+bot.infinity_polling()
