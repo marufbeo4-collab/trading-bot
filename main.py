@@ -7,7 +7,7 @@ from flask import Flask
 
 # --- CONFIGURATION ---
 BOT_TOKEN = '8183778698:AAGiOJuiN4ZRT7iEvIQLM3JaHc_tu1EFSWY'  # আপনার টোকেন বসান
-CHANNEL_ID = '1002629495753' # আপনার গ্রুপের লিংক
+CHANNEL_ID = '-1002629495753' # আপনার গ্রুপের লিংক
 API_URL = "https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json"
 
 # --- SETUP ---
@@ -157,4 +157,5 @@ if __name__ == "__main__":
     # ২. বট চালু করা
     print("Bot is polling...")
     bot.infinity_polling()
+
 
